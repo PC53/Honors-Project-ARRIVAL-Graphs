@@ -7,6 +7,8 @@ from scipy.optimize import fsolve
 from typing import List
 import sympy as sp
 from sympy import Symbol
+from collections import deque
+
 
 
 class Arrival():
@@ -22,6 +24,7 @@ class Arrival():
         self.s_next = np.copy(self.s_1) # next switch for each node
         self.v = 0 # current node 
         
+        self.trim_dead_ends()
         self.get_equations()
         
     def __repr__(self):
@@ -57,6 +60,68 @@ class Arrival():
             F[v] = sp.Min(total_sum,self.n*(2**self.n))
                     
         return F
+    
+    def trim_dead_ends(self):
+        dead_ends = self.find_dead_ends()
+        for dead_end in dead_ends:
+            self.vertices.remove(dead_end)
+            self.s_0 = np.delete(self.s_0, dead_end, axis=0)
+            self.s_1 = np.delete(self.s_1, dead_end, axis=0)
+            self.s_curr = np.delete(self.s_curr, dead_end, axis=0)
+            self.s_next = np.delete(self.s_next, dead_end, axis=0)
+    
+    # def find_dead_ends(self):
+    #     visited = set()
+    #     dead_ends = set()
+
+    #     def bfs(node):
+    #         queue = deque([node])
+    #         visited.add(node)
+
+    #         while queue:
+    #             current_node = queue.popleft()
+    #             successors = np.concatenate([self.s_0[current_node], self.s_1[current_node]])
+    #             for successor in successors:
+    #                 if successor not in visited:
+    #                     visited.add(successor)
+    #                     queue.append(successor)
+
+    #             if current_node not in np.concatenate([self.s_0, self.s_1]):
+    #                 dead_ends.add(current_node)
+
+    #     for vertex in self.vertices:
+    #         if vertex not in visited:
+    #             bfs(vertex)
+
+    #     return list(dead_ends)
+    def find_dead_ends(self):
+        visited = set()
+        dead_ends = set()
+
+        def bfs(node):
+            queue = deque([node])
+            visited.add(node)
+
+            while queue:
+                current_node = queue.popleft()
+                successors = np.concatenate([self.s_0[current_node], self.s_1[current_node]])
+                
+                # Filter out successors that are -1 (indicating no successor)
+                successors = successors[successors != -1]
+
+                for successor in successors:
+                    if successor not in visited:
+                        visited.add(successor)
+                        queue.append(successor)
+
+                if current_node not in np.concatenate([self.s_0, self.s_1]):
+                    dead_ends.add(current_node)
+
+        for vertex in self.vertices:
+            if vertex not in visited:
+                bfs(vertex)
+
+        return list(dead_ends)
               
     def get_equations(self):
         self.X = sp.symbols(' '.join([f"X{i}" for i in self.vertices]),positive=True)
