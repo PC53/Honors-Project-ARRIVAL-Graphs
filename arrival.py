@@ -15,7 +15,7 @@ class Arrival():
     
     def __init__(self,n):
         self.n = n # number of nodes
-        self.vertices = range(n) # zero is origin and n is the destination 
+        self.vertices = [v for v in range(n)] # zero is origin and n is the destination 
         self.s_0 = np.array([rand.choice([i for i in range(n) if i != v]) for v in self.vertices])  # even successors
         self.s_1 = np.array([rand.choice([i for i in range(n) if i != v]) for v in self.vertices])  # odd successors
       
@@ -23,7 +23,7 @@ class Arrival():
         self.s_curr = np.copy(self.s_0) # current switches for each node
         self.s_next = np.copy(self.s_1) # next switch for each node
         self.v = 0 # current node 
-        
+        self.plot_graph('untrimmed.gv')
         self.trim_dead_ends()
         self.get_equations()
         
@@ -37,10 +37,10 @@ class Arrival():
         self.next[v] = next
         return next
     
-    def plot_graph(self):
-        g = graphviz.Digraph('G', filename='arrival.gv')
+    def plot_graph(self,filename):
+        g = graphviz.Digraph('G', filename=filename)
         # g.edges(self.vertices)
-        for v in self.vertices:
+        for v in range(self.n):
             g.edge(str(v),str(self.s_0[v]),label='0')
             g.edge(str(v),str(self.s_1[v]),label='1')
             
@@ -62,38 +62,23 @@ class Arrival():
         return F
     
     def trim_dead_ends(self):
-        dead_ends = self.find_dead_ends()
-        for dead_end in dead_ends:
-            self.vertices.remove(dead_end)
-            self.s_0 = np.delete(self.s_0, dead_end, axis=0)
-            self.s_1 = np.delete(self.s_1, dead_end, axis=0)
-            self.s_curr = np.delete(self.s_curr, dead_end, axis=0)
-            self.s_next = np.delete(self.s_next, dead_end, axis=0)
+        while True:
+            print(self.vertices)
+            print(self.s_0)
+            print(self.s_1)
+            dead_ends = self.find_dead_ends()
+            if dead_ends == []:
+                break 
+            
+            print(dead_ends)
+            for dead_end in dead_ends:
+                self.vertices.remove(dead_end)
+                self.n -= 1
+                self.s_0 = np.delete(self.s_0, dead_end, axis=0)
+                self.s_1 = np.delete(self.s_1, dead_end, axis=0)
+                self.s_curr = np.delete(self.s_curr, dead_end, axis=0)
+                self.s_next = np.delete(self.s_next, dead_end, axis=0)
     
-    # def find_dead_ends(self):
-    #     visited = set()
-    #     dead_ends = set()
-
-    #     def bfs(node):
-    #         queue = deque([node])
-    #         visited.add(node)
-
-    #         while queue:
-    #             current_node = queue.popleft()
-    #             successors = np.concatenate([self.s_0[current_node], self.s_1[current_node]])
-    #             for successor in successors:
-    #                 if successor not in visited:
-    #                     visited.add(successor)
-    #                     queue.append(successor)
-
-    #             if current_node not in np.concatenate([self.s_0, self.s_1]):
-    #                 dead_ends.add(current_node)
-
-    #     for vertex in self.vertices:
-    #         if vertex not in visited:
-    #             bfs(vertex)
-
-    #     return list(dead_ends)
     def find_dead_ends(self):
         visited = set()
         dead_ends = set()
@@ -104,7 +89,11 @@ class Arrival():
 
             while queue:
                 current_node = queue.popleft()
-                successors = np.concatenate([self.s_0[current_node], self.s_1[current_node]])
+                # print(current_node)
+                successors = np.array([self.vertices[v] for v in range(self.n) if self.s_0[v] == current_node] + 
+                                            [self.vertices[v] for v in range(self.n) if self.s_1[v] == current_node])
+                
+                # successors = np.array()
                 
                 # Filter out successors that are -1 (indicating no successor)
                 successors = successors[successors != -1]
@@ -122,12 +111,47 @@ class Arrival():
                 bfs(vertex)
 
         return list(dead_ends)
+
+    def find_dead_ends1(self,origin, destination):
+        # Initialize the queue for BFS
+        queue = deque([destination])
+
+        # Initialize switching behavior for each node
+        switching_behavior = {}
+
+        # Initialize switching to even for all nodes
+        for node in graph.nodes:
+            switching_behavior[node] = 'even'
+
+        # Initialize dead ends list
+        dead_ends = []
+
+        while queue:
+            current_node = queue.popleft()
+
+            # Switch the successor type for the current node
+            current_successor_type = switching_behavior[current_node]
+            next_successor_type = 'odd' if current_successor_type == 'even' else 'even'
+            switching_behavior[current_node] = next_successor_type
+
+            # Check if the current node is a dead end
+            if not graph.successors(current_node, successor_type=current_successor_type):
+                dead_ends.append(current_node)
+
+            # Add unvisited neighbors to the queue
+            for neighbor in graph.neighbors(current_node):
+                if neighbor not in switching_behavior:
+                    queue.append(neighbor)
+                    switching_behavior[neighbor] = next_successor_type
+
+        return dead_ends
+
               
     def get_equations(self):
-        self.X = sp.symbols(' '.join([f"X{i}" for i in self.vertices]),positive=True)
+        self.X = sp.symbols(' '.join([f"X{i}" for i in range(self.n)]),positive=True)
         
         self.equations = []
-        for v in self.vertices:
+        for v in range(self.n):
             odd_parents = np.where(self.s_1 == v)[0]
             even_parents = np.where(self.s_0 == v)[0]
             
@@ -175,7 +199,7 @@ class Arrival():
 a = Arrival(25)
 
 # # print(a.s_0)
-a.plot_graph()
+a.plot_graph('arrival.gv')
 # x_guess = np.ones(a.n)
 # # F = a.system_of_equations(x_guess)
 # sol = fsolve(a.system_of_equations,x_guess)
