@@ -23,15 +23,15 @@ class Arrival():
         self.s_curr = np.copy(self.s_0) # current switches for each node
         self.s_next = np.copy(self.s_1) # next switch for each node
         self.v = 0 # current node 
-        self.plot_graph('untrimmed.gv')
-        self.trim_dead_ends()
+        # self.plot_graph('untrimmed.gv')
+        # self.trim_dead_ends()
         self.get_equations()
         
     def __repr__(self):
         return f"Even Successors: {self.s_0}\nOdd Successors: {self.s_1}\nCurrent Switches: {self.s_curr}\nNext Switches: {self.s_next}\nCurrent Node: {self.v}"
     
     def next_node(self,v):
-        assert v < n
+        assert v < self.n
         next = self.s_curr[v]
         self.s_curr[v] = self.s_next[v]
         self.next[v] = next
@@ -60,59 +60,6 @@ class Arrival():
             F[v] = sp.Min(total_sum,self.n*(2**self.n))
                     
         return F
-    
-    def trim_dead_ends(self):
-        while True:
-            print(self.vertices)
-            print(self.s_0)
-            print(self.s_1)
-            dead_ends = self.find_dead_ends()
-            if dead_ends == []:
-                break 
-            
-            print(dead_ends)
-            for dead_end in dead_ends:
-                self.vertices.remove(dead_end)
-                self.n -= 1
-                self.s_0 = np.delete(self.s_0, dead_end, axis=0)
-                self.s_1 = np.delete(self.s_1, dead_end, axis=0)
-                self.s_curr = np.delete(self.s_curr, dead_end, axis=0)
-                self.s_next = np.delete(self.s_next, dead_end, axis=0)
-    
-    def find_dead_ends(self):
-        visited = set()
-        dead_ends = set()
-
-        def bfs(node):
-            queue = deque([node])
-            visited.add(node)
-
-            while queue:
-                current_node = queue.popleft()
-                # print(current_node)
-                successors = np.array([self.vertices[v] for v in range(self.n) if self.s_0[v] == current_node] + 
-                                            [self.vertices[v] for v in range(self.n) if self.s_1[v] == current_node])
-                
-                # successors = np.array()
-                
-                # Filter out successors that are -1 (indicating no successor)
-                successors = successors[successors != -1]
-
-                for successor in successors:
-                    if successor not in visited:
-                        visited.add(successor)
-                        queue.append(successor)
-
-                if current_node not in np.concatenate([self.s_0, self.s_1]):
-                    dead_ends.add(current_node)
-
-        for vertex in self.vertices:
-            if vertex not in visited:
-                bfs(vertex)
-
-        return list(dead_ends)
-
-    def find_dead_ends1(self,origin, destination):
         # Initialize the queue for BFS
         queue = deque([destination])
 
@@ -196,7 +143,7 @@ class Arrival():
     
     
 ##### driver code 
-a = Arrival(25)
+a = Arrival(8)
 
 # # print(a.s_0)
 a.plot_graph('arrival.gv')
