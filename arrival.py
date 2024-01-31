@@ -10,110 +10,153 @@ from sympy import Symbol
 from collections import deque
 
 
-
 class Arrival():
     
     def __init__(self,n):
         self.n = n # number of nodes
         self.vertices = [v for v in range(n)] # zero is origin and n is the destination 
-        self.s_0 = np.array([rand.choice([i for i in range(n) if i != v]) for v in self.vertices])  # even successors
-        self.s_1 = np.array([rand.choice([i for i in range(n) if i != v]) for v in self.vertices])  # odd successors
+        self.s_0 = np.array([random.choice([i for i in range(n) if i != v]) for v in self.vertices])  # even successors
+        self.s_1 = np.array([random.choice([i for i in range(n) if i != v]) for v in self.vertices])  # odd successors
       
         # Some edges can have both successor as themselves, acting as sinks. should this be allowed??
+        self.start_node = 0 # current node 
+        self.target_node = n-1
+        
+        # Construct Graph Structure and Equations for node visit counts
+        self.raw_graph = self.get_network_graph()
+        self.draw_graph(self.raw_graph)
+        
+        self.graph = self.combine_unreachable_nodes()
+        self.s_0, self.s_1 = self.update_successor_list(self.s_0,self.s_1)
+        self.X,self.equations = self.get_equations()
+        
         self.s_curr = np.copy(self.s_0) # current switches for each node
         self.s_next = np.copy(self.s_1) # next switch for each node
-        self.v = 0 # current node 
-        # self.plot_graph('untrimmed.gv')
-        # self.trim_dead_ends()
-        self.get_equations()
         
+        self.draw_graph(self.graph)
+        
+    
     def __repr__(self):
-        return f"Even Successors: {self.s_0}\nOdd Successors: {self.s_1}\nCurrent Switches: {self.s_curr}\nNext Switches: {self.s_next}\nCurrent Node: {self.v}"
+        return f"Even Successors: {self.s_0}\nOdd Successors: {self.s_1}\nCurrent Switches: {self.s_curr}\nNext Switches: {self.s_next}"
     
-    def next_node(self,v):
-        assert v < self.n
-        next = self.s_curr[v]
-        self.s_curr[v] = self.s_next[v]
-        self.next[v] = next
-        return next
-    
-    def plot_graph(self,filename):
-        g = graphviz.Digraph('G', filename=filename)
-        # g.edges(self.vertices)
-        for v in range(self.n):
-            g.edge(str(v),str(self.s_0[v]),label='0')
-            g.edge(str(v),str(self.s_1[v]),label='1')
+    def update_successor_list(self,s_0,s_1):
+        ## now the successor lists is 0 indexed with last element being the successors for -1
+        new_s0, new_s1 = [-1]*self.n, [-1]*self.n
+        for node in self.graph.nodes:
+            if node == -1:
+                continue
             
-        g.view()
-            
-    def system_of_equations(self,x : np.array(int)):
-        # number of times the node was visited
-        F = np.empty((len(self.vertices)))
+            for source,target,attr in self.graph.out_edges(node,data=True):
+                # print(edge)
+                label = attr['label']
+                # print(node ,edge, label)
+                
+                if label == '1':
+                    new_s1[node] = target
+                elif label == '0':
+                    new_s0[node] = target     
+        # print(new_s1) 
+        return new_s0,new_s1
+        
+    def get_network_graph(self):
+        G = nx.MultiDiGraph()
+        G.add_nodes_from(self.vertices, d_dash=False)
         
         for v in self.vertices:
-            odd_parents = np.where(self.s_1 == v)[0]
-            even_parents = np.where(self.s_0 == v)[0]
-            parent_sum = sum([math.floor(x[p]/2) for p in odd_parents]) + sum([math.ceil(x[p]/2) for p in even_parents])
-
-            # origin is visited one extra time 
-            total_sum = parent_sum + 1 if v==0 else parent_sum
-            F[v] = sp.Min(total_sum,self.n*(2**self.n))
-                    
-        return F
-        # Initialize the queue for BFS
-        queue = deque([destination])
-
-        # Initialize switching behavior for each node
-        switching_behavior = {}
-
-        # Initialize switching to even for all nodes
-        for node in graph.nodes:
-            switching_behavior[node] = 'even'
-
-        # Initialize dead ends list
-        dead_ends = []
-
-        while queue:
-            current_node = queue.popleft()
-
-            # Switch the successor type for the current node
-            current_successor_type = switching_behavior[current_node]
-            next_successor_type = 'odd' if current_successor_type == 'even' else 'even'
-            switching_behavior[current_node] = next_successor_type
-
-            # Check if the current node is a dead end
-            if not graph.successors(current_node, successor_type=current_successor_type):
-                dead_ends.append(current_node)
-
-            # Add unvisited neighbors to the queue
-            for neighbor in graph.neighbors(current_node):
-                if neighbor not in switching_behavior:
-                    queue.append(neighbor)
-                    switching_behavior[neighbor] = next_successor_type
-
-        return dead_ends
-
-              
-    def get_equations(self):
-        self.X = sp.symbols(' '.join([f"X{i}" for i in range(self.n)]),positive=True)
+            G.add_edge(v,self.s_0[v],label='0')
+            G.add_edge(v,self.s_1[v],label='1')
+            
+        return G
         
-        self.equations = []
-        for v in range(self.n):
-            odd_parents = np.where(self.s_1 == v)[0]
-            even_parents = np.where(self.s_0 == v)[0]
+    def combine_unreachable_nodes_old(self):
+        # reachable_nodes = nx.descendants(self.raw_graph, self.start_node) | {self.start_node}
+        reachable_nodes = nx.ancestors(self.raw_graph, self.target_node) | {self.target_node}
+
+        new_G = nx.MultiDiGraph()
+        mapping = {}
+        counter = 0
+        for node in self.raw_graph.nodes():
+            if node in reachable_nodes:
+                mapping[node] = counter ### to reset the node number we add counter
+                counter += 1
+            else:
+                # print(f'removing node {node}')
+                mapping[node] = -1
+        # print(mapping)
+        new_G.add_node(-1)
+
+        for source, target, attr in self.raw_graph.edges(data=True):
+
+            if source in reachable_nodes and target in reachable_nodes:
+                new_G.add_edge(mapping[source], mapping[target],label=attr['label'])
+            elif source in reachable_nodes:
+                new_G.add_edge(mapping[source], -1,label=attr['label'])
+                
+
+        new_G.add_edge(-1, -1,label = '1')
+        new_G.add_edge(-1, -1,label = '0')
+        
+        ## Changing the vertices
+        self.vertices = list(new_G.nodes)
+        self.n = len(self.vertices)
+        self.target_node = self.n-2 
+        
+        # print(n)
+        return new_G
+
+    def combine_unreachable_nodes(self):
+        # reachable_nodes = nx.descendants(self.raw_graph, self.start_node) | {self.start_node}
+        reachable_nodes = nx.ancestors(self.raw_graph, self.target_node) | {self.target_node}
+
+        new_G = nx.MultiDiGraph()
+        new_G.add_edges_from((-1, -1,{"label" : '1'}),(-1, -1,{"label" : '0'}))
+        
+        for s,t,attr in self.raw_graph.edges(data=True):
+            if s not in reachable_nodes:
+                new_G.add_edge(s, -1,label=attr['label'])
+            else:
+                new_G.add_edge(s, t,label=attr['label'])
+                
+        ## Changing the vertices
+        self.vertices = list(new_G.nodes)
+        self.n = len(self.vertices)
+        self.target_node = self.n-2 
+        
+        # print(n)
+        return new_G
+
+    def get_equations(self):
+        symbol_nodes = list(self.graph.nodes)
+        symbol_nodes.sort()
+        
+        symbols = sp.symbols(' '.join([f"X{i}" for i in symbol_nodes]),positive=True)
+        s_mappings = {n:s for n,s in zip(symbol_nodes,symbols)}
+        
+        
+        equations = []  
+        for v in symbol_nodes:
+            odd_parents = []
+            even_parents = []
+            for s, t, attr in self.graph.in_edges(v,data=True):
+                
+                label = attr['label']
+                if label == '1':
+                    odd_parents.append(s)
+                elif label == '0':
+                    even_parents.append(s)
             
             parent_sum = sp.sympify(0)
             for p in odd_parents:
-                parent_sum += sp.floor(self.X[p]/2)
+                parent_sum += sp.floor(s_mappings[p]/2)
             for p in even_parents:
-                parent_sum += sp.ceiling(self.X[p]/2)
+                parent_sum += sp.ceiling(s_mappings[p]/2)
             # parent_sum = sum([math.floor(X[p]/2) for p in odd_parents]) + sum([math.ceil(X[p]/2) for p in even_parents])
             # eq = X[v] - (parent_sum + 1) if v == 0 else X[v] - parent_sum # origin is visited one more time
             total_sum = (parent_sum + 1) if v == 0 else parent_sum # origin is visited one more time
             eq = sp.Min(total_sum,self.n*(2**self.n))
-            self.equations.append(eq)
+            equations.append(eq)
             
-        return self.X,self.equations
+        return list(s_mappings.values()),equations
     
     def evaluate(self,x):
         assert len(x) == self.n
@@ -127,27 +170,39 @@ class Arrival():
             results.append(result)
         
         return np.array(results)
+    
+    def draw_graph(self,G):
+        pos = nx.spring_layout(G)
+        edge_labels = {(i, j): attr['label'] for i, j, attr in G.edges(data=True)}
+        # node_labels = nx.get_node_attributes(self.graph, 'd_dash')
+        nx.draw(G,pos, with_labels=True, node_size=200)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+        # nx.draw_networkx_labels(self.raw_graph, pos, labels=node_labels)
+        
+        plt.show()
+    
+    def save_graph(self,filename):
+        ## TODO save graph from self.graph in pdf as well as .npy file
+        g = graphviz.Digraph('G', filename=filename)
+        # g.edges(self.vertices)
+        for v in range(self.n):
+            g.edge(str(v),str(self.s_0[v]),label='0')
+            g.edge(str(v),str(self.s_1[v]),label='1')
             
+        g.view()
+            
+    def next_node(self,v):
+        assert v < self.n
+        next = self.s_curr[v]
+        self.s_curr[v] = self.s_next[v]
+        self.s_next[v] = next
+        return next    
         
+    def run_procedure(self):
+        v = self.start_node
+        while v != self.target_node and v != -1:
+            print(v)
+            v = self.next_node(v)
+            
+        return v
         
-    
-# Example usage:
-# n = 5 # Size of the instance
-# game = Arrival(n)
-# print(game)
-# game.plot_graph()
-# print(game.equations)
-# result = game.evaluate(np.ones(n))
-# print(result)
-
-    
-    
-##### driver code 
-a = Arrival(8)
-
-# # print(a.s_0)
-a.plot_graph('arrival.gv')
-# x_guess = np.ones(a.n)
-# # F = a.system_of_equations(x_guess)
-# sol = fsolve(a.system_of_equations,x_guess)
-# print(a.system_of_equations(sol))
