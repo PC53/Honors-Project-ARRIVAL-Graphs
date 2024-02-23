@@ -1,6 +1,8 @@
+import networkx as nx 
+import random
+import matplotlib.pyplot as plt
 import numpy as np 
 import math 
-import random as rand
 import copy 
 import graphviz
 from scipy.optimize import fsolve
@@ -9,10 +11,9 @@ import sympy as sp
 from sympy import Symbol
 from collections import deque
 
-
 class Arrival():
     
-    def __init__(self,n):
+    def __init__(self,n:int):
         self.n = n # number of nodes
         self.vertices = [v for v in range(n)] # zero is origin and n is the destination 
         self.s_0 = np.array([random.choice([i for i in range(n) if i != v]) for v in self.vertices])  # even successors
@@ -24,22 +25,19 @@ class Arrival():
         
         # Construct Graph Structure and Equations for node visit counts
         self.raw_graph = self.get_network_graph()
-        self.draw_graph(self.raw_graph)
+        # self.draw_graph(self.raw_graph)
         
         self.graph = self.combine_unreachable_nodes()
-        self.s_0, self.s_1 = self.update_successor_list(self.s_0,self.s_1)
+        self.s_0, self.s_1 = self.update_successor_list()
         self.X,self.equations = self.get_equations()
         
-        self.s_curr = np.copy(self.s_0) # current switches for each node
-        self.s_next = np.copy(self.s_1) # next switch for each node
-        
         self.draw_graph(self.graph)
-        
+         
     
     def __repr__(self):
-        return f"Even Successors: {self.s_0}\nOdd Successors: {self.s_1}\nCurrent Switches: {self.s_curr}\nNext Switches: {self.s_next}"
+        return f"Vertices: {self.vertices} \nEven Successors: {self.s_0}\nOdd Successors: {self.s_1}\n"
     
-    def update_successor_list(self,s_0,s_1):
+    def update_successor_list(self):
         ## now the successor lists is 0 indexed with last element being the successors for -1
         new_s0, new_s1 = [-1]*self.n, [-1]*self.n
         for node in self.graph.nodes:
@@ -109,7 +107,7 @@ class Arrival():
         reachable_nodes = nx.ancestors(self.raw_graph, self.target_node) | {self.target_node}
 
         new_G = nx.MultiDiGraph()
-        new_G.add_edges_from((-1, -1,{"label" : '1'}),(-1, -1,{"label" : '0'}))
+        new_G.add_edges_from([(-1, -1,{"label" : '1'}),(-1, -1,{"label" : '0'})])
         
         for s,t,attr in self.raw_graph.edges(data=True):
             if s not in reachable_nodes:
@@ -119,6 +117,8 @@ class Arrival():
                 
         ## Changing the vertices
         self.vertices = list(new_G.nodes)
+        self.vertices.sort()
+        
         self.n = len(self.vertices)
         self.target_node = self.n-2 
         
@@ -183,6 +183,10 @@ class Arrival():
     
     def save_graph(self,filename):
         ## TODO save graph from self.graph in pdf as well as .npy file
+        with open(filename, 'wb') as f:
+            pickle.dump(a.graph, f, pickle.HIGHEST_PROTOCOL)
+            
+            
         g = graphviz.Digraph('G', filename=filename)
         # g.edges(self.vertices)
         for v in range(self.n):
@@ -190,19 +194,50 @@ class Arrival():
             g.edge(str(v),str(self.s_1[v]),label='1')
             
         g.view()
+        
+    def load_graph(self,filename:str):
+        
+        with open(filename, 'rb') as f:
+            self.raw_graph = pickle.load(f)
             
-    def next_node(self,v):
+        self.vertices = list(self.raw_graph.nodes) # zero is origin and n is the destination 
+        self.n = len(self.vertices) # number of nodes
+        self.draw_graph(self.raw_graph)
+        
+        # Some edges can have both successor as themselves, acting as sinks. should this be allowed??
+        self.start_node = 0 # current node 
+        self.target_node = n-1
+        self.graph = self.combine_unreachable_nodes()
+        self.draw_graph(self.graph)
+        
+        self.s_0, self.s_1 = self.update_successor_list(self.s_0,self.s_1)
+        self.X,self.equations = self.get_equations()
+        
+            
+    def next_node(self,v,s_curr,s_next):
         assert v < self.n
-        next = self.s_curr[v]
+        next = s_curr[v]
         self.s_curr[v] = self.s_next[v]
         self.s_next[v] = next
         return next    
         
     def run_procedure(self):
         v = self.start_node
+        s_curr = np.copy(self.s_0) # current switches for each node
+        s_next = np.copy(self.s_1) # next switch for each node
+        counter = 0
         while v != self.target_node and v != -1:
-            print(v)
-            v = self.next_node(v)
+            counter += 1
+            print(f'move {counter} :{v}')
+            
+            w = s_curr[v]
+            s_curr[v] = s_next[v]
+            s_next[v] = w  
+            v = w
             
         return v
         
+    
+##### driver code 
+a = Arrival(30)
+a
