@@ -1,0 +1,4 @@
+Testing on 13/03/24
+
+- Random Normally generated graph;  w_i = 1  for i ; phi in [0.1,0.9]; n =100; number of instances = 100
+- some instances returned t which had no trians on target or sink, might be due to the size of S subset 
